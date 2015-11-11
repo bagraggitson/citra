@@ -59,6 +59,8 @@ void RasterizerOpenGL::InitObjects() {
     // Bind the UBO to binding point 0
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, uniform_buffer.handle);
 
+    uniform_block_data.dirty = true;
+
     // Set vertex attributes
     glVertexAttribPointer(GLShader::ATTRIBUTE_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(HardwareVertex), (GLvoid*)offsetof(HardwareVertex, position));
     glEnableVertexAttribArray(GLShader::ATTRIBUTE_POSITION);
@@ -153,8 +155,12 @@ void RasterizerOpenGL::DrawTriangles() {
         state.draw.shader_dirty = false;
     }
 
+    if (uniform_block_data.dirty) {
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(UniformData), &uniform_block_data.data, GL_STATIC_DRAW);
+        uniform_block_data.dirty = false;
+    }
+
     glBufferData(GL_ARRAY_BUFFER, vertex_batch.size() * sizeof(HardwareVertex), vertex_batch.data(), GL_STREAM_DRAW);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(UniformData), &uniform_data, GL_STATIC_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_batch.size());
 
     vertex_batch.clear();
@@ -624,7 +630,10 @@ void RasterizerOpenGL::SyncBlendColor() {
 
 void RasterizerOpenGL::SyncAlphaTest() {
     const auto& regs = Pica::g_state.regs;
-    uniform_data.alphatest_ref = regs.output_merger.alpha_test.ref;
+    if (regs.output_merger.alpha_test.ref != uniform_block_data.data.alphatest_ref) {
+        uniform_block_data.data.alphatest_ref = regs.output_merger.alpha_test.ref;
+        uniform_block_data.dirty = true;
+    }
 }
 
 void RasterizerOpenGL::SyncLogicOp() {
@@ -656,12 +665,18 @@ void RasterizerOpenGL::SyncDepthTest() {
 
 void RasterizerOpenGL::SyncCombinerColor() {
     auto combiner_color = PicaToGL::ColorRGBA8(Pica::g_state.regs.tev_combiner_buffer_color.raw);
-    uniform_data.tev_combiner_buffer_color = combiner_color;
+    if (combiner_color != uniform_block_data.data.tev_combiner_buffer_color) {
+        uniform_block_data.data.tev_combiner_buffer_color = combiner_color;
+        uniform_block_data.dirty = true;
+    }
 }
 
 void RasterizerOpenGL::SyncTevConstColor(int stage_index, const Pica::Regs::TevStageConfig& tev_stage) {
     auto const_color = PicaToGL::ColorRGBA8(tev_stage.const_color);
-    uniform_data.const_color[stage_index] = const_color;
+    if (const_color != uniform_block_data.data.const_color[stage_index]) {
+        uniform_block_data.data.const_color[stage_index] = const_color;
+        uniform_block_data.dirty = true;
+    }
 }
 
 void RasterizerOpenGL::SyncDrawState() {

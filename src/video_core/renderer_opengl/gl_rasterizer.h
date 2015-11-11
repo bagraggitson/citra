@@ -304,7 +304,10 @@ private:
     std::unordered_map<PicaShaderConfig, std::unique_ptr<PicaShader>> shader_cache;
     const PicaShader* current_shader = nullptr;
 
-    UniformData uniform_data;
+    struct {
+        UniformData data;
+        bool dirty;
+    } uniform_block_data;
 
     OGLVertexArray vertex_array;
     OGLBuffer vertex_buffer;
